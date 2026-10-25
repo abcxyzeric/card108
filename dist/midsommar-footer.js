@@ -81,8 +81,13 @@ only();
 [tavern_events.CHARACTER_MESSAGE_RENDERED, tavern_events.MESSAGE_DELETED].forEach((e) => eventOn(e, only));
 
 await waitGlobalInitialized('Mvu');
-const sd = Mvu.getMvuData({ type: 'message', message_id: 'latest' }).stat_data;
-const day = Number(sd.时空.日期), slot = SLOTS.indexOf(sd.时空.时段);
+const sd = (Mvu.getMvuData({ type: 'message', message_id: 'latest' }) || {}).stat_data || {};
+const tk = sd['Thời không'] || sd['时空'] || {};
+const day = Math.min(9, Math.max(0, Number(tk['Ngày'] ?? tk['日期'] ?? 0)));
+const rawSlot = tk['Buổi'] ?? tk['时段'] ?? 'Buổi sáng';
+const slotMap = { '上午': 0, '下午': 1, '傍晚': 2, '夜里': 3, 'Buổi sáng': 0, 'Buổi chiều': 1, 'Chập tối': 2, 'Ban đêm': 3 };
+const slot = slotMap[rawSlot] ?? Math.max(0, SLOTS.indexOf(rawSlot));
+const currentLoc = tk['Địa điểm'] ?? tk['地点'] ?? 'Sân bay';
 
 // ==== 九天日程 ====
 const p = (day + (slot + 1) / 4) / 10;
@@ -98,7 +103,11 @@ const box = el('map').querySelector('.frame');
 const map = box.querySelector('.map');
 const info = box.appendChild(document.createElement('div'));
 info.className = 'info';
-map.querySelectorAll('.loc').forEach((g) => g.classList.toggle('cur', g.dataset.loc === currentLoc || locAlias[g.dataset.loc] === currentLoc || Object.entries(locAlias).find(([vi, cn]) => cn === currentLoc && vi === g.dataset.loc)));
+map.querySelectorAll('.loc').forEach((g) => {
+  const gLoc = (g.dataset && g.dataset.loc) || (g.getAttribute && g.getAttribute('data-loc'));
+  const isCur = gLoc === currentLoc || locAlias[gLoc] === currentLoc || locAlias[currentLoc] === gLoc;
+  g.classList.toggle('cur', isCur);
+});
 let open = null;
 box.addEventListener('click', (e) => {
   const g = e.target.closest('.loc');
@@ -106,8 +115,9 @@ box.addEventListener('click', (e) => {
   map.querySelectorAll('.loc').forEach((x) => x.classList.toggle('sel', x === open));
   info.classList.toggle('on', !!open);
   if (!open) return;
-  const [img, text] = MAPINFO[open.dataset.loc];
-  info.innerHTML = '<div class="pic" style="background-image:url(' + img + ')"></div><div class="txt"><b>' + open.dataset.loc + '</b>' + text + '</div>';
+  const [img, text] = MAPINFO[open.dataset.loc] || MAPINFO[locAlias[open.dataset.loc]] || [];
+  const locNameVi = Object.entries(locAlias).find(([vi, zh]) => zh === open.dataset.loc)?.[0] || open.dataset.loc;
+  info.innerHTML = '<div class="pic" style="background-image:url(' + img + ')"></div><div class="txt"><b>' + locNameVi + '</b>' + text + '</div>';
 });
 
 // ==== 她们的故事：左大图，右边名字、介绍与缩略图，点缩略图换大图 ====
